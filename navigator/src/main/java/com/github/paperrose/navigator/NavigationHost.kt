@@ -3,53 +3,56 @@ package com.github.paperrose.navigator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import com.github.paperrose.navigator.NavigationController.Companion.DEFAULT_STACK_NAME
+
+data class InitialDestination(
+    val route: String,
+    val args: Map<String, Any>,
+    val stackName: String = DEFAULT_STACK_NAME
+)
+
 
 @Composable
 fun NavigationHost(
-    navigationController: NavigationController,
+    controllerName: String,
+    initialDestination: InitialDestination,
+    viewModelProvider: ViewModelProvider,
+    backHandler: (String?) -> Unit = {},
+    finish: () -> Unit = {},
     builder: NavigationController.() -> Unit
 ) {
-    //navigationController.setDestinations(destinations)
-    builder.invoke(navigationController)
-    val entries by navigationController.entries.collectAsState()
+    val hasController = NavigationController.hasController(controllerName)
+    val controller = NavigationController.getController(controllerName, finish)
+    controller.viewModelProvider = viewModelProvider
+    builder.invoke(controller)
+    if (!hasController)
+        controller.replaceStack(
+            initialDestination.stackName,
+            initialDestination.route,
+            initialDestination.args
+        )
+    val entries by controller.entries.collectAsState()
     entries.forEach {
-        it.content(it.destinationWrapper)
+        it.content(it)
+    }
+    BackHandler {
+        if (!controller.back()) {
+            backHandler(null)
+            controller.finish()
+            controller.destroy()
+        } else
+            backHandler(controller.currentStack?.name)
     }
 }
 
-@Composable
-fun Test() {
-    val controller = NavigationController()
-    controller.viewModelProvider = object : ViewModelProvider() {
-        override fun getViewModelByType(type: String, args: Map<String, Any>): NavViewModel {
-            return NavViewModel(args)
-        }
-    }
-    NavigationHost(navigationController = controller) {
-        composable("test") {
-            Screen1(it)
-        }
-        composable("test2") {
-            Screen1(it)
-        }
-        composable("test3") {
-            Screen1(it)
-        }
-        composable("test4") {
-            Screen1(it)
-        }
-    }
-}
-
-@Composable
-fun Screen1(
-    destinationWrapper: DestinationWrapper
-) {
-}
 
 fun NavigationController.composable(
     route: String,
-    content: @Composable (DestinationWrapper) -> Unit
+    content: @Composable (NavEntry) -> Unit
 ) {
     this.addDestination(Destination(route, content))
 }
